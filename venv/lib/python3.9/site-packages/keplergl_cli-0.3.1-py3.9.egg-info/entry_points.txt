@@ -1,0 +1,4 @@
+[console_scripts]
+kepler = keplergl_cli.cli:main
+keplergl_quickvis = keplergl_cli.cli:main
+

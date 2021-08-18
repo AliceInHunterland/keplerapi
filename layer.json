@@ -1,0 +1,50 @@
+{
+    "id": "1",
+    "type": "point",
+        "visualChannels": {
+              "colorField": {
+                "name": "z",
+                "type": "integer"
+              },
+              "colorScale": "quantize",
+              "sizeField": null,
+              "sizeScale": "linear",
+              "strokeColorField": {
+                "name": "z",
+                "type": "integer"
+              },
+              "strokeColorScale": "quantize",
+              "heightField": null,
+              "heightScale": "linear",
+              "radiusField": null,
+              "radiusScale": "linear"
+            },
+    "config": {
+        "dataId": "earthquakes",
+
+        "color": [
+            23,
+            184,
+            190
+        ],
+        "columns": {
+            "lat": "y",
+            "lng": "x",
+          "altitude": "z"
+
+        },
+        "isVisible": true,
+         "visConfig": {
+              "radius": 1,
+              "opacity": 0.8,
+              "worldUnitSize":500},
+
+
+          "sizeRange": [
+                0,
+                500
+              ]
+
+
+    }
+}
