@@ -41,8 +41,7 @@ class Visualize:
             names=None,
             read_only=False,
             api_key=None,
-            style=None,
-            layer=None):
+            ):
         """Visualize data using kepler.gl
 
         Args:
@@ -62,12 +61,12 @@ class Visualize:
             if self.MAPBOX_API_KEY is None:
                 print(msg)
 
-        config = self.config(style=style, layer=layer)
+        config = self.config()
         self.map = KeplerGl(config=config)
 
         if data is not None:
             self.add_data(data=data, names=names)
-            self.html_path = self.render(read_only=read_only)
+        self.html_path = self.render(read_only=read_only)
 
     def config(self, style=None, layer=None):
         """Load kepler.gl config and insert Mapbox API Key"""
@@ -86,42 +85,13 @@ class Visualize:
 
         text = text.replace('{MAPBOX_API_KEY}', self.MAPBOX_API_KEY)
         keplergl_config = json.loads(text)
-        print(keplergl_config)
 
-        if layer is not None:
-            keplergl_config['config']['config']['visState']["layers"].append(json.loads(layer))
-        with open('current_config.json', 'w') as f:
-            f.write(json.dumps(keplergl_config))
+
 
         # If style_url is not None, replace existing value
-        standard_styles = [
-            'streets',
-            'outdoors',
-            'light',
-            'dark',
-            'satellite',
-            'satellite-streets',
-        ]
-        if style is not None:
-            style = style.lower()
-            if style in standard_styles:
-                # Just change the name of the mapStyle.StyleType key
-                keplergl_config['config']['config']['mapStyle']['styleType'] = style
-            else:
-                # Add a new style with that url
-                d = {
-                    'accessToken': self.MAPBOX_API_KEY,
-                    'custom': True,
-                    'id': 'custom',
-                    'label': 'Custom map style',
-                    'url': style
-                }
-                keplergl_config['config']['config']['mapStyle']['mapStyles']['custom'] = d
-                keplergl_config['config']['config']['mapStyle']['styleType'] = 'custom'
 
         # Remove map state in the hope that it'll auto-center based on data
-        # keplergl_config['config']['config'].pop('mapState')
-        print(keplergl_config)
+        #keplergl_config['config']['config'].pop('mapState')
         return keplergl_config['config']
 
     def add_data(self, data, names=None):
@@ -154,14 +124,18 @@ class Visualize:
 
 
 
-    def render(self, open_browser=True, read_only=False):
+    def render(self, open_browser=False, read_only=False):
         """Export kepler.gl map to HTML file and open in Chrome
         """
         # Generate path to a temporary file
-        path = os.path.join(tempfile.mkdtemp(), 'vis.html')
+
+        path = os.path.join(os.getcwd(),'swagger','templates', 'vis.html')
+        if os.path.exists(path):
+            os.remove(path)
         self.map.save_to_html(file_name=path, read_only=read_only)
 
         # Open saved HTML file in new tab in default browser
-        webbrowser.open_new_tab('file://' + path)
+        if open_browser:
+            webbrowser.open_new_tab('file://' + path)
 
         return path

@@ -1,4 +1,5 @@
 import json
+import os
 
 from apispec import APISpec
 from apispec.ext.marshmallow import MarshmallowPlugin
@@ -12,12 +13,12 @@ app = Flask(__name__, template_folder='swagger/templates')
 
 
 @app.route('/')
-def hello_world():
-    return 'Hello, World'
+def home():
+    return render_template('vis.html')
 
 
 spec = APISpec(
-    title='flask-api-swagger-doc',
+    title='biogeohab-swagger-doc',
     version='1.0.0',
     openapi_version='3.0.2',
     plugins=[FlaskPlugin(), MarshmallowPlugin()]
@@ -71,6 +72,7 @@ def todo():
 
 class PointParameter(Schema):
     point = fields.Str()
+    data_name = fields.Str()
 
 
 class PointSchema(Schema):
@@ -83,7 +85,7 @@ def add_point():
     """Post one Point
     ---
     post:
-        description: Post One Point
+        description: Post One Point example
         parameters:
           - in: query
             schema: PointParameter
@@ -97,14 +99,22 @@ def add_point():
     """
 
     point = request.args.get('point')
+    data_name = request.args.get('data_name')
     print(point)
-    res = kepler.add_point(point)
+    print(type(point))
+    res = kepler.add_point(point, data_name)
     return jsonify(status=res), 200
 
 
+# add_layer(json.dumps({'data_name': 'qw2', 'type': 'point', 'layer_name': 'vtoroi'}),
+#           json.dumps([{"x": 3, "y": 2, "z": 3}, {"x": 2, "y": 3, "z": 3}]))
+# add_point(json.dumps({"x": 1, "y": 2, "z": 3}), 'qw2')
+#
+# add_layer(json.dumps({'data_name': 'qw2', 'type': 'point', 'layer_name': 'vtoroi'}))
 class LayerParameters(Schema):
-    name_of_layer = fields.Str()
-    type_of_layer = fields.Str()
+    data_name = fields.Str()
+    layer_type = fields.Str()
+    layer_name = fields.Str()
     points = fields.Str()
 
     # name type
@@ -130,10 +140,11 @@ def add_layer():
 
     points = request.args.get('points')
     print(points)
-    name = request.args.get('name_of_layer')
-    type = request.args.get('type_of_layer')
-    print(name, type)
-    res = kepler.add_layer(json.dumps({'name': name, 'type': type}), points)
+    data_name = request.args.get('data_name')
+    layer_name = request.args.get('layer_name')
+    typ = request.args.get('layer_type')
+    print(data_name,typ,layer_name)
+    res = kepler.add_layer(json.dumps({'data_name': data_name, 'type': typ, 'layer_name': layer_name}), points)
     return jsonify(status=res), 200
 
 
@@ -171,6 +182,7 @@ with app.test_request_context():
     spec.path(view=add_point)
     spec.path(view=add_layer)
     spec.path(view=bounds_layer)
+
 
 @app.route('/docs')
 @app.route('/docs/<path:path>')

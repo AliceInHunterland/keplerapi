@@ -4,7 +4,21 @@
     "version": "v1",
     "config": {
       "visState": {
-        "filters": [],
+        "filters": [
+       {
+            "dataId": "earthquakes",
+            "id": "1",
+            "name": "datetime",
+            "type": "timeRange",
+            "value": [
+                663046722470,
+                1301519405470
+            ],
+            "enlarged": true,
+            "plotType": "histogram",
+            "yAxis": null
+        }
+    ],
         "layers": [],
         "interactionConfig": {
           "tooltip": {

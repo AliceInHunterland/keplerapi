@@ -1,4 +1,5 @@
 import csv
+import glob
 import json
 import elevation
 import os
@@ -18,59 +19,88 @@ df = pd.DataFrame(
 
 # Create your geospatial objects
 
-def add_point(point):
+def add_point(point, file_name):
     list_point = json.loads(point)
-    print(type(list_point))
-    list_point = [list_point['x'], list_point['y'], list_point['z']]
-    if os.path.exists('out.csv'):
-        with open('out.csv', 'a') as fd:
+    print(list_point)
+    colomns = []
+    vals = []
+    for item in list_point:
+        print(list_point[item])
+        colomns.append(item)
+        vals.append(list_point[item])
+    if os.path.exists(file_name + '.csv'):
+        with open(file_name + '.csv', 'a') as fd:
             writer = csv.writer(fd)
-            writer.writerow(list_point)
+            writer.writerow(vals)
     else:
-        with open('out.csv', 'w') as fd:
+        with open(file_name + '.csv', 'w') as fd:
             writer = csv.writer(fd)
-            writer.writerow(['x', 'y', 'z'])
-            writer.writerow(list_point)
+            writer.writerow(colomns)
+            writer.writerow(vals)
 
     print(list_point)
     return 'Added'
-    # df_point.to_csv('out.csv', header=['x', 'y', 'z'], index=False)
 
 
 def zeroing():
-    if os.path.exists("out.csv"):
-        os.remove("out.csv")
+    result = glob.glob('*.{}'.format('csv'))
+    print(result)
+    for file in result:
+        os.remove(file)
     if os.path.exists("current_config.json"):
         os.remove("current_config.json")
+    Visualize(api_key=MAPBOX_API_KEY)
 
 
-# zeroing()
-# add_point('{"x": 1, "y": 2, "z": 3}')
-# print('q')
-
-# [{"x": 15, "y": 2, "z": 3},{"x": 15, "y": 2, "z": 3}]
-def add_layer(layer_config, json_of_points=''):
+def add_layer(layer_config, json_of_points=None):
     # name type
-    if json_of_points != '':
-        print(len(json.loads(json_of_points)))
-        for point in json.loads(json_of_points):
-            print(point)
-            add_point(json.dumps(point))
-    if os.path.exists('out.csv'):
-        df = pd.read_csv('out.csv')
-
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.x, df.y))
-
     with open('layer.json') as f:
         layer_style = f.read()
-    layer_config = json.loads(layer_config)
-    print(layer_style)
-    style = json.loads(layer_style)
-    style["config"]["dataId"] = layer_config['name']
-    style["type"] = layer_config['type']
 
-    layer_style = json.dumps(style)
-    Visualize(gdf, names=[layer_config['name']], api_key=MAPBOX_API_KEY, layer=layer_style)
+    layer_config = json.loads(layer_config)
+
+    if json_of_points is not None:
+
+        for point in json.loads(json_of_points):
+            add_point(json.dumps(point), layer_config['data_name'])
+
+    style = json.loads(layer_style)
+    style["config"]["dataId"] = layer_config['data_name']
+    style["config"]["label"] = layer_config['layer_name']
+    style["type"] = layer_config['type']
+    if os.path.exists('current_config.json'):
+        with open('current_config.json') as f:
+            text = f.read()
+        keplergl_config = json.loads(text)
+        for item, layer in enumerate(keplergl_config['config']['config']['visState']["layers"]):
+
+            if layer["config"]["label"] == layer_config['layer_name']:
+                print(layer["config"]["label"])
+                keplergl_config['config']['config']['visState']["layers"].pop(item)
+
+    else:
+
+        with open('keplergl_config.json') as f:
+            text = f.read()
+            keplergl_config = json.loads(text)
+
+    print(len(keplergl_config['config']['config']['visState']["layers"]))
+    style["id"] = len(keplergl_config['config']['config']['visState']["layers"])
+    keplergl_config['config']['config']['visState']["layers"].append(style)
+
+    prepared_data = []
+    names_data = []
+    for layer in keplergl_config['config']['config']['visState']["layers"]:
+
+        if os.path.exists(layer["config"]["dataId"] + '.csv'):
+            df = pd.read_csv(layer["config"]["dataId"] + '.csv')
+            gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.x, df.y))
+            prepared_data.append(gdf)
+            names_data.append(layer["config"]["dataId"])
+
+    with open('current_config.json', 'w') as f:
+        f.write(json.dumps(keplergl_config))
+    Visualize(prepared_data, names=names_data, api_key=MAPBOX_API_KEY)
     return 'Success'
 
 
@@ -86,15 +116,54 @@ def bounds_layer(bound):
     rtxyz = Raster2xyz()
     rtxyz.translate(input_raster, output_csv)
 
-    df = pd.read_csv('rome.csv')
-
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.x, df.y))
-    with open('layer.json') as f:
-        layer_style = f.read()
-    style = json.loads(layer_style)
-    data_name = style["config"]["dataId"]
-    # Visualize one or multiple objects at a time
-    Visualize(gdf, names=[data_name], api_key=MAPBOX_API_KEY, layer=layer_style)
+    add_layer(json.dumps({'data_name': 'rome', 'type': 'point', 'layer_name': 'bounds'}))
     return "Success"
+
+
+def add_filter(data_name):
+    if os.path.exists('current_config.json'):
+        with open('current_config.json') as f:
+            text = f.read()
+    else:
+
+        with open('keplergl_config.json') as f:
+            text = f.read()
+
+    keplergl_config = json.loads(text)
+    keplergl_config['config']['config']['visState']['filters'][0]['dataId'] = data_name
+    print(keplergl_config)
+    with open('current_config.json', 'w') as f:
+        f.write(json.dumps(keplergl_config))
+    # for layer in keplergl_config['config']['config']['visState']["layers"]:
+    #
+    #     if layer["config"]["dataId"] == data_name:
+    #         layer_name = layer["config"]["label"]
+    add_layer(json.dumps({'data_name': data_name, 'type': 'point', 'layer_name':"filter"}))
+
+    # Visualize(api_key=MAPBOX_API_KEY)
+
+
+# add_filter('qw2')
+
+# delete all csv and temp files
+#zeroing()
+
+# Adding point into test.csv
+# add_point('{"x": 1, "y": 2, "z": 3}', 'test')
+
+# Adding layer with data from qw1.csv, tipe of data can be point,.(i foggot)... and name of layer -first
+# add_layer(json.dumps({'data_name': 'qw1', 'type': 'point', 'layer_name': 'first'}),
+#          json.dumps([{"x": 1, "y": 2, "z": 3}, {"x": 2, "y": 1, "z": 3}]))
+# add_layer(json.dumps({'data_name': 'qw2', 'type': 'point', 'layer_name': 'vtoroi'}),
+#           json.dumps([{"x": 3, "y": 2, "z": 3}, {"x": 2, "y": 3, "z": 3}]))
+# add_point(json.dumps({"x": 2, "y": 2, "z": 3}), 'qw2')
+# add_point(json.dumps({"x": 2, "y": 2, "z": 3,'datatime':4444}), 'qw1')
+# add_point(json.dumps({"x": 2, "y": 2, "z": 3,'datatime':4444}), 'qw2')
+# #
+# add_layer(json.dumps({'data_name': 'qw2', 'type': 'point', 'layer_name': '1'}))
+#
+# add_filter('qw2')
 # html_path = vis.render(open_browser=True, read_only=False)
-# bounds_layer((12.55, 41.95, 12.65, 42))
+
+# Adding layer with points from the square
+# bounds_layer((9.89, 41.89, 10, 42))
