@@ -1,19 +1,35 @@
 import json
 import os
-
+import cv2
 from apispec import APISpec
 from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec_webframeworks.flask import FlaskPlugin
-from flask import Flask, jsonify, render_template, send_from_directory, request
+from flask import Flask, jsonify, render_template, send_from_directory, request, redirect, url_for
 from marshmallow import Schema, fields
 import kepler
+from werkzeug.utils import secure_filename
 from ast import literal_eval as make_tuple
+import requests
+
+# from pyproj import Proj, transform
+
+# P3857 = Proj(init='epsg:3857')
+# P4326 = Proj(init='epsg:4326')
+
 
 app = Flask(__name__, template_folder='swagger/templates')
+app.config['UPLOAD_FOLDER'] = './uploads'
+ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'])
 
 
-@app.route('/')
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1] in ALLOWED_EXTENSIONS
+
+
+@app.route('/main')
 def home():
+    print('ssssssssss')
     return render_template('vis.html')
 
 
@@ -143,7 +159,7 @@ def add_layer():
     data_name = request.args.get('data_name')
     layer_name = request.args.get('layer_name')
     typ = request.args.get('layer_type')
-    print(data_name,typ,layer_name)
+    print(data_name, typ, layer_name)
     res = kepler.add_layer(json.dumps({'data_name': data_name, 'type': typ, 'layer_name': layer_name}), points)
     return jsonify(status=res), 200
 
@@ -192,6 +208,108 @@ def swagger_docs(path=None):
     else:
         return send_from_directory('./swagger/static', path)
 
+
+@app.route('/upload')
+def upload():
+    return render_template('upload.html')
+
+
+def parse_video(filepath):
+    print('video is reseived ')
+    vidcap = cv2.VideoCapture(filepath)
+    success, image = vidcap.read()
+    count = 0
+    while success:
+        if count > 10000 and count < 10050:
+            cv2.imwrite(os.path.join('./uploads', "frame%d.jpg" % count), image)
+            print(count)  # save frame as JPEG file
+        success, image = vidcap.read()
+        # print('Read a new frame: ', count)
+        count += 1
+        if count == 10051:
+            break
+    print('video is parsed')
+
+
+def gettext(filepath, coordinates={'x': 1030, 'y': 62, 'w': 350, 'h': 100}):
+    dictToSend = json.dumps({'name': coordinates})
+    print(dictToSend)
+    print(type(json.dumps(dictToSend)))
+    files = {'image': open(filepath, 'rb')}
+    res = requests.post('http://0.0.0.0:8000/get_ocr', files=files, params={"json_boxes": dictToSend})
+    print(res.url)
+    print('response from server:', res.text)
+    mytext = res.json()["name"]
+    specialChars = " '.,:;!?#$%^&*( )"
+    for specialChar in specialChars:
+        mytext = mytext.replace(specialChar, '')
+    i = mytext.find('N')
+    j = mytext.find('E')
+    if i != -1 and j != -1:
+        lat = mytext[i - 7:i]
+        lon = mytext[j - 7:j]
+
+        lat = lat[:2] + '.' + lat[2:]
+        lon = lon[:2] + '.' + lon[2:]
+        try:
+            lat = (-1) * float(lat)
+            lon = (-1) * float(lon)
+
+            # lat, lon = transform(P4326, P3857, lon, lat)
+
+        except ValueError:
+            lat = ''
+            lon = ''
+    else:
+        lat = ''
+        lon = ''
+    # m = mytext.split()
+    # print(m)
+    # lat = m[0].split(':')[1].split(';')[2][:-1]
+    # lon = m[1].split(':')[1].split(';')[2][:-1]
+    print(lat)
+    print(lon)
+    return lat, lon
+
+
+@app.route('/uploader', methods=['GET', 'POST'])
+def uploader():
+    if request.method == 'POST':
+        file = request.files['file']
+
+        filename = secure_filename(file.filename)
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        if request.form['text1'] != '':
+            boarders = {"x": int(request.form['text1']), "y": int(request.form['text2']),
+                        "w": int(request.form['text3']), "h": int(request.form['text4'])}
+        else:
+            boarders = {'x': 1260, 'y': 70, 'w': 350, 'h': 100}
+        parse_video(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        print(boarders)
+        point_list = []
+        for file in os.listdir(app.config['UPLOAD_FOLDER']):
+            print(file)
+            if file[-3:] == 'jpg':
+                print('MY PICS')
+                new_point = {"x": 3, "y": 2, "z": 3}
+                lat, lon = gettext(os.path.join(app.config['UPLOAD_FOLDER'], file), boarders)
+                print(lat, lon)
+                if lat != '':
+                    new_point["x"] = float(lat)
+                    new_point["y"] = float(lon)
+                    point_list.append(new_point)
+                    print('pppppppppppp', new_point)
+        print('aaaaaaaaaa', point_list)
+        # add_layer(json.dumps({'data_name': 'qw2', 'type': 'point', 'layer_name': 'vtoroi'}),
+        #           json.dumps([{"x": 3, "y": 2, "z": 3}, {"x": 2, "y": 3, "z": 3}]))
+        kepler.add_layer(json.dumps({'data_name': 'last', 'type': 'point', 'layer_name': 'last'}),
+                         json.dumps(point_list))
+        return redirect(url_for('upload',
+                                filename=filename))
+
+
+# kepler.add_layer(json.dumps({'data_name': 'qw2', 'type': 'point', 'layer_name': 'vtoroi'}),
+#                   json.dumps([{"x": 3, "y": 2, "z": 3}, {"x": 2, "y": 3, "z": 3}]))
 
 if __name__ == '__main__':
     app.run(debug=True)
