@@ -405,7 +405,7 @@ def uploader():
                         "w": int(request.form['text3']), "h": int(request.form['text4'])}
         else:
             boarders = {'x': 1260, 'y': 70, 'w': 350, 'h': 100}
-        # parse_video(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        parse_video(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         print(boarders)
         point_list = []
         for i,file in enumerate(sorted(os.listdir(app.config['UPLOAD_FOLDER']))):
