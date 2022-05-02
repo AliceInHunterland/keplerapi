@@ -9,6 +9,8 @@ from marshmallow import Schema, fields
 import kepler
 from werkzeug.utils import secure_filename
 from ast import literal_eval as make_tuple
+from PIL import Image, ImageEnhance
+from tesserocr import PyTessBaseAPI, RIL
 import requests
 
 # from pyproj import Proj, transform
@@ -213,6 +215,70 @@ def swagger_docs(path=None):
 def upload():
     return render_template('upload.html')
 
+#
+# def parse_video(filepath):
+#     print('video is reseived ')
+#     vidcap = cv2.VideoCapture(filepath)
+#     success, image = vidcap.read()
+#     count = 0
+#     while success:
+#         if count > 10000 and count < 10050:
+#             cv2.imwrite(os.path.join('./uploads', "frame%d.jpg" % count), image)
+#             print(count)  # save frame as JPEG file
+#         success, image = vidcap.read()
+#         # print('Read a new frame: ', count)
+#         count += 1
+#         if count == 10051:
+#             break
+#     print('video is parsed')
+#
+#
+# def gettext(filepath, coordinates={'x': 1030, 'y': 62, 'w': 350, 'h': 100}):
+#     dictToSend = json.dumps({'name': coordinates})
+#     print(dictToSend)
+#     print(type(json.dumps(dictToSend)))
+#     files = {'image': open(filepath, 'rb')}
+#     res = requests.post('http://0.0.0.0:8000/get_ocr', files=files, params={"json_boxes": dictToSend})
+#     print(res.url)
+#     print('response from server:', res.text)
+#     mytext = res.json()["name"]
+#     specialChars = " '.,:;!?#$%-][_></\|^&*( )"
+#     for specialChar in specialChars:
+#         mytext = mytext.replace(specialChar, '')
+#     i = mytext.find('N')
+#     j = mytext.find('E')
+#     if i != -1 and j != -1:
+#         lat = mytext[i - 7:i]
+#         lon = mytext[j - 7:j]
+#
+#         lat = lat[:2] + '.' + lat[2:]
+#         lon = lon[:2] + '.' + lon[2:]
+#         try:
+#             lat = (-1) * float(lat)
+#             lon = (-1) * float(lon)
+#
+#             # lat, lon = transform(P4326, P3857, lon, lat)
+#
+#         except ValueError:
+#             lat = ''
+#             lon = ''
+#     else:
+#         lat = ''
+#         lon = ''
+#     # m = mytext.split()
+#     # print(m)
+#     # lat = m[0].split(':')[1].split(';')[2][:-1]
+#     # lon = m[1].split(':')[1].split(';')[2][:-1]
+#     print(lat)
+#     print(lon)
+#     return lat, lon
+
+
+
+
+
+
+
 
 def parse_video(filepath):
     print('video is reseived ')
@@ -220,56 +286,111 @@ def parse_video(filepath):
     success, image = vidcap.read()
     count = 0
     while success:
-        if count > 10000 and count < 10050:
+        if count%1000==0: #count > 10000 and count < 20750 and
             cv2.imwrite(os.path.join('./uploads', "frame%d.jpg" % count), image)
-            print(count)  # save frame as JPEG file
+            # print(count)  # save frame as JPEG file
         success, image = vidcap.read()
         # print('Read a new frame: ', count)
         count += 1
-        if count == 10051:
-            break
+        # if count ==20751:
+        #     break
     print('video is parsed')
 
-
-def gettext(filepath, coordinates={'x': 1030, 'y': 62, 'w': 350, 'h': 100}):
+def gettext(filepath, coordinates=  {'x': 1030, 'y': 62, 'w': 350, 'h': 100}):
     dictToSend = json.dumps({'name': coordinates})
-    print(dictToSend)
-    print(type(json.dumps(dictToSend)))
-    files = {'image': open(filepath, 'rb')}
-    res = requests.post('http://0.0.0.0:8000/get_ocr', files=files, params={"json_boxes": dictToSend})
-    print(res.url)
-    print('response from server:', res.text)
-    mytext = res.json()["name"]
-    specialChars = " '.,:;!?#$%^&*( )"
-    for specialChar in specialChars:
-        mytext = mytext.replace(specialChar, '')
-    i = mytext.find('N')
-    j = mytext.find('E')
-    if i != -1 and j != -1:
-        lat = mytext[i - 7:i]
-        lon = mytext[j - 7:j]
+    # print(dictToSend)
+    # print(type(json.dumps(dictToSend)))
+    # files = {'image': open(filepath, 'rb')}
+    # res = requests.post('http://0.0.0.0:8000/get_ocr', files=files, params={"json_boxes": dictToSend})
+    # print(res.text)
+    # return res.text
+    # file_name = os.path.join(main_dir,filepath)
+    dictToSend = json.dumps({'name': coordinates})
+    json_boxes = dictToSend
+    scale_factor = 1
+    image = Image.open(filepath)  # TODO: remove store to FS!!!
+    (width, height) = (image.width * scale_factor, image.height * scale_factor)
+    image = image.resize((width, height))
+    results = {}
+    image = image.convert('L').convert('RGB')
 
-        lat = lat[:2] + '.' + lat[2:]
-        lon = lon[:2] + '.' + lon[2:]
-        try:
-            lat = (-1) * float(lat)
-            lon = (-1) * float(lon)
+    enhancer = ImageEnhance.Contrast(image)
+    factor_contrast = 1.5
+    image = enhancer.enhance(factor_contrast)
 
-            # lat, lon = transform(P4326, P3857, lon, lat)
+    enhancer = ImageEnhance.Brightness(image)
+    factor_brightness = 1.1  # darkens the image
+    image = enhancer.enhance(factor_brightness)
 
-        except ValueError:
+    with PyTessBaseAPI() as api:
+        api.SetImage(image)
+        # boxes = api.GetComponentImages(RIL.TEXTLINE, True)
+        # print('Found {} textline image components.'.format(len(boxes)))
+        boxes = json.loads(json_boxes)
+        # print(boxes)
+        # print()
+        # for i in range(1000):
+        for key, box in boxes.items():
+                # im is a PIL image object
+                # box is a dict with x, y, w and h keys
+                api.SetRectangle(box['x'] * scale_factor, box['y'] * scale_factor, box['w'] * scale_factor,
+                                 box['h'] * scale_factor)
+                ocrResult = api.GetUTF8Text()
+                conf = api.MeanTextConf()
+                # print(key)
+                #
+                # print(u"Box[{0}]: x={x}, y={y}, w={w}, h={h}, "
+                #       "confidence: {1}, text: {2}".format(key, conf, ocrResult, **box))
+                results[key] = ocrResult
+        print(results)
+        mytext = results["name"]
+        specialChars = " '.,[°]:;!?#$%-][_></\|^&*( )"
+        for specialChar in specialChars:
+            mytext = mytext.replace(specialChar, '')
+        i = mytext.find('N')
+        j = mytext.find('E')
+        if i != -1 and j != -1:
+
+
+            lat_sec = mytext[i - 7:i]
+            lat_min = mytext[i - 7 - 2:i - 7]
+            lat_deg = mytext[i - 7 - 2 - 2:i - 7 - 2]
+            lat_sec = lat_sec[:2] + '.' + lat_sec[2:]
+
+            print(lat_deg,  lat_min, lat_sec)
+            # lat = (float(lat_deg) + float(lat_min) / 60 + float(lat_sec) / (60 * 60)) * (1)
+
+            lon_sec = mytext[j - 7:j]
+            lon_sec = lon_sec[:2] + '.' + lon_sec[2:]
+            lon_min = mytext[j - 7 - 2:j - 7]
+            lon_deg = mytext[j - 7 - 2 - 2:j - 7 - 2]
+
+
+            # lon = (float(lon_deg) + float(lon_min) / 60 + float(lon_sec) / (60 * 60)) * (1)
+            print(lon_deg, lon_min, lon_sec)
+            try:
+                # lat = float(lat)
+                # lon = float(lon)
+                lat = round((float(lat_deg) + float(lat_min) / 60 + float(lat_sec) / (60 * 60)) * (1), 5)
+
+                lon = round((float(lon_deg) + float(lon_min) / 60 + float(lon_sec) / (60 * 60)) * (1),5)
+                # lat, lon = transform(P4326, P3857, lon, lat)
+
+            except ValueError:
+                lat = ''
+                lon = ''
+        else:
             lat = ''
             lon = ''
-    else:
-        lat = ''
-        lon = ''
-    # m = mytext.split()
-    # print(m)
-    # lat = m[0].split(':')[1].split(';')[2][:-1]
-    # lon = m[1].split(':')[1].split(';')[2][:-1]
-    print(lat)
-    print(lon)
-    return lat, lon
+    return lon,lat
+# parse_video('./uploads/sample_video.avi')
+# res = gettext(os.path.join(main_dir,'1.png' ))
+# for file in os.listdir(main_dir):
+
+    # if file[-3:] == 'jpg':
+    #     res = gettext(os.path.join(main_dir, file))
+    #     print(file, res)
+# print(res)
 
 
 @app.route('/uploader', methods=['GET', 'POST'])
@@ -284,10 +405,10 @@ def uploader():
                         "w": int(request.form['text3']), "h": int(request.form['text4'])}
         else:
             boarders = {'x': 1260, 'y': 70, 'w': 350, 'h': 100}
-        parse_video(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        # parse_video(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         print(boarders)
         point_list = []
-        for file in os.listdir(app.config['UPLOAD_FOLDER']):
+        for i,file in enumerate(sorted(os.listdir(app.config['UPLOAD_FOLDER']))):
             print(file)
             if file[-3:] == 'jpg':
                 print('MY PICS')
@@ -297,9 +418,11 @@ def uploader():
                 if lat != '':
                     new_point["x"] = float(lat)
                     new_point["y"] = float(lon)
+                    new_point["z"] = int(i)
                     point_list.append(new_point)
                     print('pppppppppppp', new_point)
         print('aaaaaaaaaa', point_list)
+        # print('bbbbbbbbbbbbbbbbbbbbb', set([x.items() for x in point_list ]))
         # add_layer(json.dumps({'data_name': 'qw2', 'type': 'point', 'layer_name': 'vtoroi'}),
         #           json.dumps([{"x": 3, "y": 2, "z": 3}, {"x": 2, "y": 3, "z": 3}]))
         kepler.add_layer(json.dumps({'data_name': 'last', 'type': 'point', 'layer_name': 'last'}),
